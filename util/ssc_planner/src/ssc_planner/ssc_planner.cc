@@ -103,47 +103,47 @@ ErrorType SscPlanner::RunOnce() {
   has_initial_state_ = false;
 
   is_lateral_independent_ =
-      initial_state_.velocity > cfg_.planner_cfg().low_speed_threshold()
-          ? true
-          : false;
+      initial_state_.velocity > cfg_.planner_cfg().low_speed_threshold() ? true : false;
+  // 基于 map_->ego_behavior().ref_lane，获取reference line ;
   if (map_itf_->GetLocalReferenceLane(&nav_lane_local_) != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to find ego lane.";
     return kWrongStatus;
   }
   stf_ = common::StateTransformer(nav_lane_local_);
-
+  // 自车状态投影到frenet 坐标系中
   if (stf_.GetFrenetStateFromState(initial_state_, &initial_frenet_state_) !=
       kSuccess) {
     LOG(ERROR) << "[Ssc]fail to get init state frenet state.";
     return kWrongStatus;
   }
-
+  
   if (map_itf_->GetEgoDiscretBehavior(&ego_behavior_) != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to get ego behavior.";
     return kWrongStatus;
   }
-
+  
   if (map_itf_->GetObstacleMap(&grid_map_) != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to get obstacle map.";
     return kWrongStatus;
   }
-
+  // 障碍物栅格
   if (map_itf_->GetObstacleGrids(&obstacle_grids_) != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to get obstacle grids.";
     return kWrongStatus;
   }
-
+  // 获取前向仿真的轨迹？
   if (map_itf_->GetForwardTrajectories(&forward_behaviors_, &forward_trajs_,
                                        &surround_forward_trajs_) != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to get forward trajectories.";
     return kWrongStatus;
   }
-
+  
   auto t_prepare = timer_prepare.toc();
   LOG(WARNING) << "[Ssc]prepare time cost: " << t_prepare << " ms";
 
   static TicToc timer_stf;
   timer_stf.tic();
+  // 将自车及周边障碍物信息投影到frenet 坐标系中
   if (StateTransformForInputData() != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to transform state into ff.";
     return kWrongStatus;
@@ -158,6 +158,7 @@ ErrorType SscPlanner::RunOnce() {
   p_ssc_map_->ResetSscMap(initial_frenet_state_);
   // ~ For closed-loop simulation prediction
   int num_behaviors = forward_behaviors_.size();
+  // 构建三维ssc map 
   for (int i = 0; i < num_behaviors; ++i) {
     if (!cfg_.planner_cfg().is_fitting_only()) {
       if (p_ssc_map_->ConstructSscMap(surround_forward_trajs_fs_[i],
@@ -172,12 +173,15 @@ ErrorType SscPlanner::RunOnce() {
     // p_ssc_map_->InflateObstacleGrid(ego_vehicle_.param());
     // printf("[SscPlanner] InflateObstacleGrid time cost: %lf ms\n",
     //        timer_infl.toc());
+
+    // 基于前向仿真的轨迹生成时空语义走廊 ssc
     if (p_ssc_map_->ConstructCorridorUsingInitialTrajectory(
             p_ssc_map_->p_3d_grid(), forward_trajs_fs_[i]) != kSuccess) {
       LOG(ERROR) << "[Ssc]fail to construct corridor for behavior " << i;
       return kWrongStatus;
     }
   }
+  // 获取最终的连续立方体走廊 
   if (kSuccess != p_ssc_map_->GetFinalGlobalMetricCubesList()) {
     LOG(ERROR) << "[Ssc]fail to get final corridor";
     return kWrongStatus;
@@ -188,6 +192,7 @@ ErrorType SscPlanner::RunOnce() {
 
   static TicToc timer_opt;
   timer_opt.tic();
+  // 轨迹优化
   if (RunQpOptimization() != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to optimize qp trajectories.\n";
     return kWrongStatus;
@@ -436,10 +441,11 @@ ErrorType SscPlanner::StateTransformForInputData() {
   int num_v;
 
   // ~ Stage I. Package states and points
-  // * Ego vehicle state and vertices
+  // * Ego vehicle state and vertices 自车状态及顶点信息
   {
     global_state_vec.push_back(initial_state_);
-    vec_E<Vec2f> v_vec;
+    vec_E<Vec2f> v_vec; 
+    //自车角点信息  左前方顶点开始逆时针方向
     common::SemanticsUtils::GetVehicleVertices(ego_vehicle_.param(),
                                                initial_state_, &v_vec);
     num_v = v_vec.size();
@@ -447,6 +453,7 @@ ErrorType SscPlanner::StateTransformForInputData() {
   }
 
   // * Ego forward simulation trajs states and vertices
+  // 前向仿真输出的自车轨迹，可能有多条
   {
     common::VehicleParam ego_param = ego_vehicle_.param();
     for (int i = 0; i < (int)forward_trajs_.size(); ++i) {
@@ -466,6 +473,7 @@ ErrorType SscPlanner::StateTransformForInputData() {
   }
 
   // * Surrounding vehicle trajs from MPDM
+  // 获取MPDM 后周边障碍物的轨迹, 不同的前向仿真轨迹，对应不同的Surrounding vehicle trajs
   {
     for (int i = 0; i < surround_forward_trajs_.size(); ++i) {
       for (auto it = surround_forward_trajs_[i].begin();
@@ -492,7 +500,7 @@ ErrorType SscPlanner::StateTransformForInputData() {
       global_point_vec.push_back(pt);
     }
   }
-
+  // 将上述自车轨迹及障碍轨迹及角点等转换到frenet 坐标下
   vec_E<FrenetState> frenet_state_vec(global_state_vec.size());
   vec_E<Vec2f> fs_point_vec(global_point_vec.size());
 
@@ -510,8 +518,9 @@ ErrorType SscPlanner::StateTransformForInputData() {
   LOG(WARNING) << "[Ssc]Single thread transform time cost: " << timer_stf.toc()
                << " ms.";
 #endif
-
+   
   // ~ Stage III. Retrieve states and points
+  // 将上面转换完的frenet 坐标系下的信息赋值给对应的成员变量中
   int offset = 0;
   // * Ego vehicle state and vertices
   {

@@ -182,6 +182,11 @@ void SscPlannerServer::PlanCycleCallback() {
   }
   // printf("input buffer size: %d.\n", p_input_smm_buff_->size_approx());
   // is_map_updated_ = false;  // return when no new map
+  /**
+   * try_dequeue 是 MoodyCamel
+   * 库中的一个函数，通常用于从无锁队列中尝试出队元素。这个函数的目的是非阻塞地尝试从队列中取出一个元素，如果队列为空，则返回
+   * false，表示操作失败。如果队列非空，它将成功地出队一个元素，并返回 true。
+   */
   while (p_input_smm_buff_->try_dequeue(last_smm_)) {
     is_map_updated_ = true;
   }

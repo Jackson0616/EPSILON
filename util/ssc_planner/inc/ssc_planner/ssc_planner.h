@@ -193,7 +193,7 @@ class SscPlanner : public Planner {
 
   common::StateTransformer stf_;
   // Map
-  SscPlannerMapItf* map_itf_;
+  SscPlannerMapItf* map_itf_; //map interface for ssc planner
   bool map_valid_ = false;
   SscMap* p_ssc_map_;
 

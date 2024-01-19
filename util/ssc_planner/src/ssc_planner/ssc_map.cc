@@ -27,6 +27,7 @@ ErrorType SscMap::ResetSscMap(const common::FrenetState &ini_fs) {
   ClearGridMap();
 
   start_time_ = ini_fs.time_stamp;
+  //更新地图原点
   UpdateMapOrigin(ini_fs);
 
   return kSuccess;
