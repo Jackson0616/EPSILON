@@ -12,9 +12,9 @@ namespace common {
 struct FrenetState {
   enum InitType { kInitWithDt, kInitWithDs };
   decimal_t time_stamp{0.0};
-  Vecf<3> vec_s{Vecf<3>::Zero()};
-  Vecf<3> vec_dt{Vecf<3>::Zero()};
-  Vecf<3> vec_ds{Vecf<3>::Zero()};
+  Vecf<3> vec_s{Vecf<3>::Zero()}; // s ds/dt dds/dt2
+  Vecf<3> vec_dt{Vecf<3>::Zero()}; // l dl/dt ddl/dt2
+  Vecf<3> vec_ds{Vecf<3>::Zero()}; // l dl/ds ddl/ds2
   bool is_ds_usable = true;
 
   FrenetState() {}

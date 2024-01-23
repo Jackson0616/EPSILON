@@ -197,6 +197,7 @@ ErrorType GridMapND<T, N_DIM>::SetValueUsingCoordinate(
     // printf("[GridMapND] Out of range\n");
     return kWrongStatus;
   }
+  // 将slt坐标索引转换为单一维度的索引
   int idx = GetMonoIdxUsingNDimIdx(coord);
   data_[idx] = val;
   return kSuccess;
@@ -277,6 +278,7 @@ bool GridMapND<T, N_DIM>::CheckCoordInRangeOnSingleDim(const int &idx,
   return (idx >= 0) && (idx < dims_size_[i]);
 }
 
+// 用于将N维坐标索引转换为单一维度的索引
 template <typename T, int N_DIM>
 int GridMapND<T, N_DIM>::GetMonoIdxUsingNDimIdx(
     const std::array<int, N_DIM> &idx) const {

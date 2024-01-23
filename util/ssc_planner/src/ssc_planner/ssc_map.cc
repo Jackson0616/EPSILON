@@ -34,6 +34,7 @@ ErrorType SscMap::ResetSscMap(const common::FrenetState &ini_fs) {
 }
 
 void SscMap::UpdateMapOrigin(const common::FrenetState &ori_fs) {
+  // 更新自车初始frenet 状态
   initial_fs_ = ori_fs;
 
   std::array<decimal_t, 3> map_origin;
@@ -51,9 +52,9 @@ ErrorType SscMap::GetInitialCubeUsingSeed(
     common::AxisAlignedCubeNd<int, 3> *cube) const {
   std::array<int, 3> lb;
   std::array<int, 3> ub;
-  lb[0] = std::min(seed_0(0), seed_1(0));
-  lb[1] = std::min(seed_0(1), seed_1(1));
-  lb[2] = std::min(seed_0(2), seed_1(2));
+  lb[0] = std::min(seed_0(0), seed_1(0)); // s
+  lb[1] = std::min(seed_0(1), seed_1(1)); // l
+  lb[2] = std::min(seed_0(2), seed_1(2)); // t
   ub[0] = std::max(seed_0(0), seed_1(0));
   ub[1] = std::max(seed_0(1), seed_1(1));
   ub[2] = std::max(seed_0(2), seed_1(2));
@@ -68,7 +69,9 @@ ErrorType SscMap::ConstructSscMap(
     const vec_E<Vec2f> &obstacle_grids) {
   p_3d_grid_->clear_data();
   p_3d_inflated_grid_->clear_data();
+  //静止障碍物 ssc_map 栅格生成
   FillStaticPart(obstacle_grids);
+  // 根据障碍物前向仿真轨迹添加 栅格
   FillDynamicPart(sur_vehicle_trajs_fs);
   return kSuccess;
 }
@@ -103,25 +106,31 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
   int num_states = static_cast<int>(trajs.size());
   if (num_states > 1) {
     bool first_seed_determined = false;
+    // 遍历轨迹
     for (int k = 0; k < num_states; ++k) {
       std::array<decimal_t, 3> p_w = {};
+      // frenet坐标系下自车初始状态
       if (!first_seed_determined) {
         decimal_t s_0 = initial_fs_.vec_s[0];
         decimal_t d_0 = initial_fs_.vec_dt[0];
         decimal_t t_0 = initial_fs_.time_stamp;
         std::array<decimal_t, 3> p_w_0 = {s_0, d_0, t_0};
+        //获取初始点在栅格地图下的坐标
         auto coord_0 = p_grid->GetCoordUsingGlobalPosition(p_w_0);
-
+        // frenet坐标系下自车前向仿真轨迹第一个点的状态
         decimal_t s_1 = trajs[k].frenet_state.vec_s[0];
         decimal_t d_1 = trajs[k].frenet_state.vec_dt[0];
         decimal_t t_1 = trajs[k].frenet_state.time_stamp;
         std::array<decimal_t, 3> p_w_1 = {s_1, d_1, t_1};
+        //栅格地图下坐标
         auto coord_1 = p_grid->GetCoordUsingGlobalPosition(p_w_1);
-        // * remove the states out of range
+        // * remove the states out of range 
+        // 移除超出范围的状态
         if (!p_grid->CheckCoordInRange(coord_1)) {
           continue;
         }
         // earlier than start time
+        // 移除早于起始时间的状态
         if (coord_1[2] <= 0) {
           continue;
         }
@@ -145,6 +154,7 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
   }
 
   // ~ Stage II: Inflate cubes
+  // 立方体膨胀
   common::DrivingCorridor driving_corridor;
   bool is_valid = true;
   auto seed_num = static_cast<int>(traj_seeds.size());
@@ -157,8 +167,11 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
   for (int i = 0; i < seed_num; ++i) {
     if (i == 0) {
       common::AxisAlignedCubeNd<int, 3> cube;
+      // 根据第一个种子点和第二个种子点生成初始立方体的函数
       GetInitialCubeUsingSeed(traj_seeds[i], traj_seeds[i + 1], &cube);
+      // 判断立方体内栅格点是否无碰撞
       if (!CheckIfCubeIsFree(p_grid, cube)) {
+        // 如果发生碰撞
         LOG(ERROR) << "[Ssc] SccMap - Initial cube is not free, seed id: " << i;
 
         common::DrivingCube driving_cube;
@@ -172,9 +185,10 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
         is_valid = false;
         break;
       }
-
+      //禁止膨胀的方向
       std::array<bool, 6> dirs_disabled = {false, false, false,
                                            false, false, false};
+      //立方体膨胀
       InflateCubeIn3dGrid(p_grid, dirs_disabled, config_.inflate_steps, &cube);
 
       common::DrivingCube driving_cube;
@@ -182,18 +196,22 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
       driving_cube.seeds.push_back(traj_seeds[i]);
       driving_corridor.cubes.push_back(driving_cube);
     } else {
+      // 检测膨胀的立方体是否包含该种子点
       if (CheckIfCubeContainsSeed(driving_corridor.cubes.back().cube,
                                   traj_seeds[i])) {
+        // 将种子点添加到膨胀的立方体seeds中
         driving_corridor.cubes.back().seeds.push_back(traj_seeds[i]);
         continue;
       } else {
         // ~ Get the last seed in cube
+        // 获取上一个立方体中最近的seed， 并从立方体中删除
         Vec3i seed_r = driving_corridor.cubes.back().seeds.back();
         driving_corridor.cubes.back().seeds.pop_back();
         // ~ Cut cube on time axis
+        // 根据上一个seed的时间戳，更新原立方体的t轴上界(沿t轴将原立方体切割)
         driving_corridor.cubes.back().cube.upper_bound[2] = seed_r(2);
         i = i - 1;
-
+        // 生成新的立方体，并膨胀
         common::AxisAlignedCubeNd<int, 3> cube;
         GetInitialCubeUsingSeed(traj_seeds[i], traj_seeds[i + 1], &cube);
 
@@ -211,7 +229,7 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
           is_valid = false;
           break;
         }
-
+        //禁止膨胀方向
         std::array<bool, 6> dirs_disabled = {false, false, false,
                                              false, false, false};
         InflateCubeIn3dGrid(p_grid, dirs_disabled, config_.inflate_steps,
@@ -224,6 +242,7 @@ ErrorType SscMap::ConstructCorridorUsingInitialTrajectory(
     }
   }
   if (is_valid) {
+    // 将安全走廊进行松弛
     // CorridorRelaxation(p_grid, &driving_corridor);
     // ~ Cut cube on time axis
     driving_corridor.cubes.back().cube.upper_bound[2] = traj_seeds.back()(2);
@@ -379,7 +398,7 @@ ErrorType SscMap::InflateCubeIn3dGrid(GridMap3D *p_grid,
                                       const std::array<bool, 6> &dir_disabled,
                                       const std::array<int, 6> &dir_step,
                                       common::AxisAlignedCubeNd<int, 3> *cube) {
-  bool x_p_finish = dir_disabled[0];
+  bool x_p_finish = dir_disabled[0]; 
   bool x_n_finish = dir_disabled[1];
   bool y_p_finish = dir_disabled[2];
   bool y_n_finish = dir_disabled[3];
@@ -390,26 +409,28 @@ ErrorType SscMap::InflateCubeIn3dGrid(GridMap3D *p_grid,
   int y_p_step = dir_step[2];
   int y_n_step = dir_step[3];
   int z_p_step = dir_step[4];
-
-  int t_max_grids = cube->lower_bound[2] + config_.kMaxNumOfGridAlongTime;
-
-  decimal_t t = t_max_grids * p_grid->dims_resolution(2);
+  // 计算立方体在t方向上的最大格数
+  int t_max_grids = cube->lower_bound[2] + config_.kMaxNumOfGridAlongTime; // 2
+   // 获取纵向加速度、减速度、位移补偿、s上界及s下界
+  decimal_t t = t_max_grids * p_grid->dims_resolution(2); 
   decimal_t a_max = config_.kMaxLongitudinalAcc;
   decimal_t a_min = config_.kMaxLongitudinalDecel;
   decimal_t d_comp = initial_fs_.vec_s[1] * 1;
-
+  // 恒加速度模型
   decimal_t s_u = initial_fs_.vec_s[0] + initial_fs_.vec_s[1] * t +
                   0.5 * a_max * t * t + d_comp;
   decimal_t s_l = initial_fs_.vec_s[0] + initial_fs_.vec_s[1] * t +
                   0.5 * a_min * t * t - d_comp;
 
   int s_idx_u, s_idx_l;
+  // 将s_u、s_l 转换到栅格地图上 s轴坐标
   p_grid->GetCoordUsingGlobalMetricOnSingleDim(s_u, 0, &s_idx_u);
   p_grid->GetCoordUsingGlobalMetricOnSingleDim(s_l, 0, &s_idx_l);
   s_idx_l = std::max(s_idx_l, static_cast<int>((config_.s_back_len / 2.0) /
                                                config_.map_resolution[0]));
-
+  // 在s和l方向上进行膨胀，直到达到上下边界
   while (!(x_p_finish && x_n_finish && y_p_finish && y_n_finish)) {
+    // 将整个立方体沿s轴正方向进行膨胀
     if (!x_p_finish) x_p_finish = InflateCubeOnXPosAxis(p_grid, x_p_step, cube);
     if (!x_n_finish) x_n_finish = InflateCubeOnXNegAxis(p_grid, x_n_step, cube);
 
@@ -421,6 +442,7 @@ ErrorType SscMap::InflateCubeIn3dGrid(GridMap3D *p_grid,
   }
 
   // ~ No need to inflate along z-neg
+  // 在t方向上进行膨胀，直到达到上边界
   while (!z_p_finish) {
     if (!z_p_finish) z_p_finish = InflateCubeOnZPosAxis(p_grid, z_p_step, cube);
 
@@ -437,9 +459,11 @@ bool SscMap::InflateCubeOnXPosAxis(GridMap3D *p_grid, const int &n_step,
                                    common::AxisAlignedCubeNd<int, 3> *cube) {
   for (int i = 0; i < n_step; ++i) {
     int x = cube->upper_bound[0] + 1;
+    // 检测是否在s轴范围内
     if (!p_grid->CheckCoordInRangeOnSingleDim(x, 0)) {
       return true;
     } else {
+      // 检测是否无碰撞
       if (CheckIfPlaneIsFreeOnXAxis(p_grid, *cube, x)) {
         // The plane in 3D obstacle grid is free
         cube->upper_bound[0] = x;
@@ -541,7 +565,7 @@ bool SscMap::InflateCubeOnZNegAxis(GridMap3D *p_grid, const int &n_step,
   }
   return false;
 }
-
+//判断立方体内栅格点是否无碰撞
 bool SscMap::CheckIfCubeIsFree(
     GridMap3D *p_grid, const common::AxisAlignedCubeNd<int, 3> &cube) const {
   int f0_min = cube.lower_bound[0];
@@ -710,11 +734,15 @@ ErrorType SscMap::FillStaticPart(const vec_E<Vec2f> &obs_grid_fs) {
     if (obs_grid_fs[i](0) <= 0) {
       continue;
     }
+    //静止障碍物，在整个时间周期t内都有栅格点 s、l、t
     for (int k = 0; k < config_.map_size[2]; ++k) {
       std::array<decimal_t, 3> pt = {{obs_grid_fs[i](0), obs_grid_fs[i](1),
                                       (double)k * config_.map_resolution[2]}};
+      //将slt 坐标信息转换为相对原点及分辨率的栅格
       auto coord = p_3d_grid_->GetCoordUsingGlobalPosition(pt);
+      //检查是否在GridMap 范围内
       if (p_3d_grid_->CheckCoordInRange(coord)) {
+        // 将slt 三维坐标索引转换到1维坐标下，参数 100 代表填充的灰度值。
         p_3d_grid_->SetValueUsingCoordinate(coord, 100);
       }
     }
@@ -725,8 +753,10 @@ ErrorType SscMap::FillStaticPart(const vec_E<Vec2f> &obs_grid_fs) {
 ErrorType SscMap::FillDynamicPart(
     const std::unordered_map<int, vec_E<common::FsVehicle>>
         &sur_vehicle_trajs_fs) {
+  //遍历动态障碍物
   for (auto it = sur_vehicle_trajs_fs.begin(); it != sur_vehicle_trajs_fs.end();
        ++it) {
+    // 生成轨迹点的栅格
     FillMapWithFsVehicleTraj(it->second);
   }
   return kSuccess;
@@ -740,6 +770,7 @@ ErrorType SscMap::FillMapWithFsVehicleTraj(
   }
   for (int i = 0; i < static_cast<int>(traj.size()); ++i) {
     bool is_valid = true;
+    // 忽略轨迹在自车后方的轨迹点
     for (const auto v : traj[i].vertices) {
       if (v(0) <= 0) {
         is_valid = false;
@@ -749,14 +780,18 @@ ErrorType SscMap::FillMapWithFsVehicleTraj(
     if (!is_valid) {
       continue;
     }
+ 
     decimal_t z = traj[i].frenet_state.time_stamp;
     int t_idx = 0;
     std::vector<common::Point2i> v_coord;
     std::array<decimal_t, 3> p_w;
     for (const auto v : traj[i].vertices) {
+      // 轨迹顶点在 slt 三维坐标
       p_w = {v(0), v(1), z};
+      // 转换到栅格地图下
       auto coord = p_3d_grid_->GetCoordUsingGlobalPosition(p_w);
       t_idx = coord[2];
+      // 忽略超出栅格地图范围的轨迹
       if (!p_3d_grid_->CheckCoordInRange(coord)) {
         is_valid = false;
         break;
@@ -766,17 +801,22 @@ ErrorType SscMap::FillMapWithFsVehicleTraj(
     if (!is_valid) {
       continue;
     }
+    // 将common::Point2i类型的坐标转换为cv::Point2i类型
     std::vector<std::vector<cv::Point2i>> vv_coord_cv;
     std::vector<cv::Point2i> v_coord_cv;
     common::ShapeUtils::GetCvPoint2iVecUsingCommonPoint2iVec(v_coord,
                                                              &v_coord_cv);
     vv_coord_cv.push_back(v_coord_cv);
+    // 获取栅格地图的宽度和高度
     int w = p_3d_grid_->dims_size()[0];
     int h = p_3d_grid_->dims_size()[1];
+    // 计算当前时间戳对应的栅格地图的偏移量
     int layer_offset = t_idx * w * h;
+    // 创建cv::Mat对象，表示当前时间戳对应的栅格地图层
     cv::Mat layer_mat =
         cv::Mat(h, w, CV_MAKETYPE(cv::DataType<SscMapDataType>::type, 1),
                 p_3d_grid_->get_data_ptr() + layer_offset);
+    // 使用cv::fillPoly填充栅格地图层， 参数 100 代表填充的灰度值。
     cv::fillPoly(layer_mat, vv_coord_cv, 100);
   }
   return kSuccess;

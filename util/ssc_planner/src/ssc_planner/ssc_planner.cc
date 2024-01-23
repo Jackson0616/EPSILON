@@ -161,6 +161,7 @@ ErrorType SscPlanner::RunOnce() {
   // 构建三维ssc map 
   for (int i = 0; i < num_behaviors; ++i) {
     if (!cfg_.planner_cfg().is_fitting_only()) {
+      //构建栅格地图
       if (p_ssc_map_->ConstructSscMap(surround_forward_trajs_fs_[i],
                                       obstacle_grids_fs_)) {
         LOG(ERROR) << "[Ssc]fail to construct ssc map.";
@@ -494,6 +495,7 @@ ErrorType SscPlanner::StateTransformForInputData() {
   }
 
   // * Obstacle grids
+  // 静态障碍物
   {
     for (auto it = obstacle_grids_.begin(); it != obstacle_grids_.end(); ++it) {
       Vec2f pt((*it)[0], (*it)[1]);
@@ -523,6 +525,7 @@ ErrorType SscPlanner::StateTransformForInputData() {
   // 将上面转换完的frenet 坐标系下的信息赋值给对应的成员变量中
   int offset = 0;
   // * Ego vehicle state and vertices
+  // 自车出事状态
   {
     fs_ego_vehicle_.frenet_state = frenet_state_vec[offset];
     fs_ego_vehicle_.vertices.clear();
@@ -533,6 +536,7 @@ ErrorType SscPlanner::StateTransformForInputData() {
   }
 
   // * Ego forward simulation trajs states and vertices
+  // 自车前向仿真(可能有多条)
   {
     forward_trajs_fs_.clear();
     if (forward_trajs_.size() < 1) return kWrongStatus;
