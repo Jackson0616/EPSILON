@@ -42,11 +42,13 @@ class EudmPlanner : public Planner {
 
   // * In forward simulation, ego agent and other agent have different
   // * properties, thus we design two different structure for them
+  // 前向仿真中主车数据
   struct ForwardSimEgoAgent {
     // * constant
     decimal_t lat_range;
 
     // * update on scenario-level
+    // 车辆横纵向控制的参数
     OnLaneForwardSimulation::Param sim_param;
 
     LatSimMode seq_lat_mode;
@@ -73,11 +75,13 @@ class EudmPlanner : public Planner {
     common::Vehicle vehicle;
   };
 
+  // 前向仿真中 障碍物车辆数据
   struct ForwardSimAgent {
     int id = kInvalidAgentId;
     common::Vehicle vehicle;
 
     // * lon
+    // 车辆横纵向控制的参数
     OnLaneForwardSimulation::Param sim_param;
 
     // * lat
@@ -98,6 +102,7 @@ class EudmPlanner : public Planner {
   struct EfficiencyCost {
     decimal_t ego_to_desired_vel = 0.0;
     decimal_t leading_to_desired_vel = 0.0;
+    // 论文中的cost是加权求和
     decimal_t ave() const {
       return (ego_to_desired_vel + leading_to_desired_vel) / 2.0;
     }
@@ -106,10 +111,12 @@ class EudmPlanner : public Planner {
   struct SafetyCost {
     decimal_t rss = 0.0;
     decimal_t occu_lane = 0.0;
+    // 论文中的cost是加权求和
     decimal_t ave() const { return (rss + occu_lane) / 2.0; }
   };
 
   struct NavigationCost {
+    // 论文中还有一项是 连续性：和上一帧规划结果的一致性
     decimal_t lane_change_preference = 0.0;
     decimal_t ave() const { return lane_change_preference; }
   };
@@ -124,6 +131,7 @@ class EudmPlanner : public Planner {
     // * navigation
     NavigationCost navigation;
     decimal_t weight = 1.0;
+    // 论文中 这三项是加权求和
     decimal_t ave() const {
       return (efficiency.ave() + safety.ave() + navigation.ave()) * weight;
     }

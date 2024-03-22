@@ -664,22 +664,32 @@ bool SscMap::CheckIfCubeContainsSeed(
   }
   return true;
 }
-
+/**
+ * @brief 获取最终的SSC 立方体列表
+ *
+ *  将原来三维 slt 立方体，拆分为对应s-t l-t 的安全走廊Spatio-Temporal Semantic Cube
+ *  这个函数负责生成最终（Spatio-Temporal Semantic Cube）列表，用于规划控制算法的进一步处理。
+ *
+ * @return ErrorType - 返回错误类型，kSuccess 表示成功，kWrongStatus 表示出现错误。
+ */
 ErrorType SscMap::GetFinalGlobalMetricCubesList() {
   final_corridor_vec_.clear();
   if_corridor_valid_.clear();
   for (const auto corridor : driving_corridor_vec_) {
     vec_E<common::SpatioTemporalSemanticCubeNd<2>> cubes;
+    // 如果整个走廊无效(有碰撞)，则标记为无效并继续下一个走廊
     if (!corridor.is_valid) {
       if_corridor_valid_.push_back(0);
     } else {
       if_corridor_valid_.push_back(1);
+      // 遍历走廊中的立方体cubes
       for (int k = 0; k < static_cast<int>(corridor.cubes.size()); ++k) {
+
         common::SpatioTemporalSemanticCubeNd<2> cube;
         decimal_t x_lb, x_ub;
         decimal_t y_lb, y_ub;
         decimal_t z_lb, z_ub;
-
+        // 获取立方体对应的s l t 边界
         p_3d_grid_->GetGlobalMetricUsingCoordOnSingleDim(
             corridor.cubes[k].cube.lower_bound[0], 0, &x_lb);
         p_3d_grid_->GetGlobalMetricUsingCoordOnSingleDim(
@@ -709,7 +719,7 @@ ErrorType SscMap::GetFinalGlobalMetricCubesList() {
         cube.v_ub[1] = config_.kMaxLateralVel;
         cube.a_lb[1] = -config_.kMaxLateralAcc;
         cube.a_ub[1] = config_.kMaxLateralAcc;
-
+        // 对于走廊中的第一个立方体，检查初始状态是否在合理的范围内
         if (k == 0) {
           if (y_lb > initial_fs_.vec_dt[0] || y_ub < initial_fs_.vec_dt[0]) {
             LOG(ERROR) << "[Ssc] SscMap - Initial state out of bound d: "

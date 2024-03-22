@@ -24,7 +24,7 @@ namespace planning {
 class DcpTree {
  public:
   using LateralBehavior = common::LateralBehavior;
-
+  // 语义决策
   enum class DcpLonAction {
     kMaintain = 0,
     kAccelerate,
@@ -42,7 +42,7 @@ class DcpTree {
   struct DcpAction {
     DcpLonAction lon = DcpLonAction::kMaintain;
     DcpLatAction lat = DcpLatAction::kLaneKeeping;
-
+    // action的持续时间
     decimal_t t = 0.0;
 
     friend std::ostream& operator<<(std::ostream& os, const DcpAction& action) {
@@ -57,7 +57,7 @@ class DcpTree {
               const decimal_t& t_)
         : lon(lon_), lat(lat_), t(t_) {}
   };
-
+  // Domain-special closed-loop policy tree (DCP-Tree)
   DcpTree(const int& tree_height, const decimal_t& layer_time);
   DcpTree(const int& tree_height, const decimal_t& layer_time,
           const decimal_t& last_layer_time);
@@ -129,11 +129,16 @@ class DcpTree {
   std::vector<DcpAction> AppendActionSequence(
       const std::vector<DcpAction>& seq_in, const DcpAction& a,
       const int& n) const;
-
+  // 设置DCP Tree的深度为 5
   int tree_height_ = 5;
+  // 设置每个 action 的作用时间为 1s
+  // so，整个决策的时域为 5s
   decimal_t layer_time_ = 1.0;
   decimal_t last_layer_time_ = 1.0;
+  // 当前决策帧正在进行的 action, (上一帧的决策)
+  // 是DCP Tree 的根节点
   DcpAction ongoing_action_;
+  // 外层为episode，内层为每一幕episode的决策序列
   std::vector<std::vector<DcpAction>> action_script_;
 };
 }  // namespace planning

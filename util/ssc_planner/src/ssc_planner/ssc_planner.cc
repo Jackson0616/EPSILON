@@ -101,9 +101,9 @@ ErrorType SscPlanner::RunOnce() {
     initial_state_ = ego_vehicle_.state();
   }
   has_initial_state_ = false;
-
+  // 高速独立，低速耦合
   is_lateral_independent_ =
-      initial_state_.velocity > cfg_.planner_cfg().low_speed_threshold() ? true : false;
+      initial_state_.velocity > cfg_.planner_cfg().low_speed_threshold() ? true : false; // 2.0
   // 基于 map_->ego_behavior().ref_lane，获取reference line ;
   if (map_itf_->GetLocalReferenceLane(&nav_lane_local_) != kSuccess) {
     LOG(ERROR) << "[Ssc]fail to find ego lane.";
@@ -182,7 +182,7 @@ ErrorType SscPlanner::RunOnce() {
       return kWrongStatus;
     }
   }
-  // 获取最终的连续立方体走廊 
+  // 获取最终的连续立方体走廊， 有几条前向仿真轨迹就有几条走廊
   if (kSuccess != p_ssc_map_->GetFinalGlobalMetricCubesList()) {
     LOG(ERROR) << "[Ssc]fail to get final corridor";
     return kWrongStatus;
@@ -235,6 +235,7 @@ ErrorType SscPlanner::RunQpOptimization() {
       p_ssc_map_->final_corridor_vec();
   std::vector<int> if_corridor_valid = p_ssc_map_->if_corridor_valid();
   if (cube_list.empty()) return kWrongStatus;
+
   if (cube_list.size() != forward_behaviors_.size()) {
     LOG(ERROR) << "[Ssc]cube list " << static_cast<int>(cube_list.size())
                << " not consist with behavior size: "
@@ -250,30 +251,34 @@ ErrorType SscPlanner::RunQpOptimization() {
   corridors_.clear();
   ref_states_list_.clear();
   for (int i = 0; i < static_cast<int>(cube_list.size()); i++) {
-    int beh = static_cast<int>(forward_behaviors_[i]);
+    int beh = static_cast<int>(forward_behaviors_[i]); // LateralBehavior
     if (if_corridor_valid[i] == 0) {
       LOG(ERROR) << "[Ssc]fail: for behavior "
                  << static_cast<int>(forward_behaviors_[i])
                  << " has no valid corridor.";
       continue;
     }
-
-    auto fs_vehicle_traj = forward_trajs_fs_[i];
+    // 第i条前向仿真轨迹
+    auto fs_vehicle_traj = forward_trajs_fs_[i]; 
     int num_states = static_cast<int>(fs_vehicle_traj.size());
-
+    // 起点约束
     vec_E<Vecf<2>> start_constraints;
+    // s_0, l_0
     start_constraints.push_back(
-        Vecf<2>(ego_frenet_state_.vec_s[0], ego_frenet_state_.vec_dt[0]));
+        Vecf<2>(ego_frenet_state_.vec_s[0], ego_frenet_state_.vec_dt[0])); 
+    // ds/dt, dl/dt
     start_constraints.push_back(
         Vecf<2>(std::max(ego_frenet_state_.vec_s[1],
                          cfg_.planner_cfg().velocity_singularity_eps()),
                 ego_frenet_state_.vec_dt[1]));
+    // dds/dt2 ddl/dt2
     start_constraints.push_back(
         Vecf<2>(ego_frenet_state_.vec_s[2], ego_frenet_state_.vec_dt[2]));
 
     // printf("[Inconsist]Start sd position (%lf, %lf).\n",
     // start_constraints[0](0),
     //        start_constraints[0](1));
+    // 终点约束（一定有么？）
     vec_E<Vecf<2>> end_constraints;
     end_constraints.push_back(
         Vecf<2>(fs_vehicle_traj[num_states - 1].frenet_state.vec_s[0],
@@ -285,16 +290,18 @@ ErrorType SscPlanner::RunQpOptimization() {
     // end_constraints.push_back(
     //     Vecf<2>(fs_vehicle_traj[num_states - 1].frenet_state.vec_s[2],
     //             fs_vehicle_traj[num_states - 1].frenet_state.vec_dt[2]));
+
+    // 2维5次贝塞尔曲线生成器
     common::SplineGenerator<5, 2> spline_generator;
     BezierSpline bezier_spline;
-
+    // 修正最后一个立方体的时间上界
     cube_list[i].back().t_ub = fs_vehicle_traj.back().frenet_state.time_stamp;
-
+    // 检测安全走廊的可行性（相邻立方体时间连续）
     if (CorridorFeasibilityCheck(cube_list[i]) != kSuccess) {
       LOG(ERROR) << "[Ssc]fail: corridor not valid for optimization.";
       continue;
     }
-
+    // 根据前向仿真轨迹构建参考轨迹: 时间戳、sl和 frenet_state
     std::vector<decimal_t> ref_stamps;
     vec_E<Vecf<2>> ref_points;
     vec_E<common::FrenetState> ref_states;
@@ -306,10 +313,12 @@ ErrorType SscPlanner::RunQpOptimization() {
     }
 
     bool bezier_spline_gen_success = true;
+    // 生成贝塞尔曲线
     if (spline_generator.GetBezierSplineUsingCorridor(
             cube_list[i], start_constraints, end_constraints, ref_stamps,
             ref_points, cfg_.planner_cfg().weight_proximity(),
             &bezier_spline) != kSuccess) {
+
       if (is_lateral_independent_) {
         LOG(ERROR) << "[Ssc]fail: solver error for behavior "
                    << static_cast<int>(forward_behaviors_[i]);
@@ -358,6 +367,7 @@ ErrorType SscPlanner::RunQpOptimization() {
     }
 
     FrenetPrimitive primitive;
+    // 
     if (!is_lateral_independent_) {
       primitive.Connect(initial_frenet_state_,
                         fs_vehicle_traj.back().frenet_state,
@@ -415,10 +425,12 @@ ErrorType SscPlanner::UpdateTrajectoryWithCurrentBehavior() {
 ErrorType SscPlanner::CorridorFeasibilityCheck(
     const vec_E<common::SpatioTemporalSemanticCubeNd<2>>& cubes) {
   int num_cubes = static_cast<int>(cubes.size());
+  // 数目
   if (num_cubes < 1) {
     LOG(ERROR) << "[Ssc]number of cubes not enough.";
     return kWrongStatus;
   }
+  // 时间连续性检测
   for (int i = 1; i < num_cubes; i++) {
     if (cubes[i - 1].t_ub != cubes[i].t_lb) {
       LOG(ERROR) << "[Ssc]Err- Corridor not consist.";

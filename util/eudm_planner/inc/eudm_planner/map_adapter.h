@@ -9,7 +9,8 @@
 #include "semantic_map_manager/semantic_map_manager.h"
 
 namespace planning {
-
+// 语义地图相关的代码结构是不是太复杂了
+// SemanticMapManager，EudmPlannerMapItf，EudmPlannerMapAdapter
 class EudmPlannerMapAdapter : public EudmPlannerMapItf {
  public:
   using IntegratedMap = semantic_map_manager::SemanticMapManager;

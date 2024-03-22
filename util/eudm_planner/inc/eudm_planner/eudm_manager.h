@@ -43,13 +43,15 @@ class EudmManager {
   };
 
   struct LaneChangeContext {
+    // 变道是否完成
     bool completed = true;
+    // 是否允许在合适的时机触发变道
     bool trigger_when_appropriate = false;
-    decimal_t trigger_time = 0.0;
+    decimal_t trigger_time = 0.0;  // 变道触发时间
     decimal_t desired_operation_time = 0.0;
     int ego_lane_id = 0;
-    LateralBehavior lat = LateralBehavior::kLaneKeeping;
-    LaneChangeTriggerType type;
+    LateralBehavior lat = LateralBehavior::kLaneKeeping;  // 变道行为
+    LaneChangeTriggerType type; // 变道触发原因
   };
 
   struct Snapshot {

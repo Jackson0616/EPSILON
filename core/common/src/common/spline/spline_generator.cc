@@ -361,23 +361,34 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
     const std::vector<decimal_t>& ref_stamps,
     const vec_E<Vecf<N_DIM>>& ref_points, const decimal_t& weight_proximity,
     BezierSplineType* bezier_spline) {
+  //维度： N_DEG = 5,  N_DIM = 2
   int num_segments = static_cast<int>(cubes.size());
   int num_order = N_DEG + 1;
   int derivative_degree = 3;
 
   // ~ Stage I: stack objective
+  // 目标函数：Jerk + sum(s_i - ref_s) 、Jerk + sum(l_i - ref_i)
+  // 待优化控制点个数
   int total_num_vals = N_DIM * num_segments * num_order;
+  // 创建稀疏矩阵 Q，使用行优先存储
   Eigen::SparseMatrix<double, Eigen::RowMajor> Q(total_num_vals,
                                                  total_num_vals);
+  // 预分配 Q 矩阵的内存
+  /**
+   * Q= ||
+  */
   Q.reserve(
       Eigen::VectorXi::Constant(N_DIM * num_segments * num_order, num_order));
-  {
+  { 
+    // \int^{1}_{0}(\dfrac{d^3(f(t))}{dt^3})^2dt 
     MatNf<N_DEG + 1> hessian =
-        BezierUtils<N_DEG>::GetBezierHessianMat(derivative_degree);
+        BezierUtils<N_DEG>::GetBezierHessianMat(derivative_degree); // (N_DEG + 1) * (N_DEG + 1)矩阵 
     int idx, idy;
     decimal_t val;
+    // 遍历每个曲线段
     for (int n = 0; n < num_segments; n++) {
       decimal_t duration = cubes[n].t_ub - cubes[n].t_lb;
+      // 遍历每个空间维度
       for (int d = 0; d < N_DIM; d++) {
         for (int j = 0; j < num_order; j++) {
           for (int k = 0; k < num_order; k++) {
@@ -394,7 +405,7 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
   Eigen::VectorXd c;
   c.resize(total_num_vals);
   c.setZero();
-
+   
   Eigen::SparseMatrix<double, Eigen::RowMajor> P(total_num_vals,
                                                  total_num_vals);
   P.reserve(
@@ -421,6 +432,8 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
       for (int d = 0; d < N_DIM; d++) {
         for (int j = 0; j < num_order; j++) {
           idx = d * num_segments * num_order + n * num_order + j;
+          // nchoosek: \frac{n!}{i!(n-i)!}
+
           c[idx] += -2 * ref_points[i][d] * s * nchoosek(N_DEG, j) *
                     pow(t / s, j) * pow(1 - t / s, N_DEG - j);
           for (int k = 0; k < num_order; k++) {
@@ -443,10 +456,11 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
   Q = 2 * (Q + P);  // 0.5 * x' * Q * x
 
   // ~ Stage II: stack equality constraints
+  // 连续性约束+起点约束+终点约束
   int num_continuity = 3;  // continuity up to jerk
-  int num_connections = num_segments - 1;
+  int num_connections = num_segments - 1; 
   // printf("num conenctions: %d.\n", num_connections);
-  int num_continuity_constraints = N_DIM * num_connections * num_continuity;
+  int num_continuity_constraints = N_DIM * num_connections * num_continuity; 
   int num_start_eq_constraints =
       static_cast<int>(start_constraints.size()) * N_DIM;
   int num_end_eq_constraints = static_cast<int>(end_constraints.size()) *
@@ -454,10 +468,16 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
   int total_num_eq_constraints = num_continuity_constraints +
                                  num_start_eq_constraints +
                                  num_end_eq_constraints;
+  
   Eigen::SparseMatrix<double, Eigen::RowMajor> A(
       total_num_eq_constraints, N_DIM * num_segments * num_order);
+  /*
+   * A = [ continuity constraints
+   *       start constraints
+   *       end constraints ]
+  */
   A.reserve(Eigen::VectorXi::Constant(total_num_eq_constraints, 2 * num_order));
-
+  
   Eigen::VectorXd b;
   b.resize(total_num_eq_constraints);
   b.setZero();
@@ -470,34 +490,34 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
       decimal_t duration_l = cubes[n].t_ub - cubes[n].t_lb;
       decimal_t duration_r = cubes[n + 1].t_ub - cubes[n + 1].t_lb;
       for (int c = 0; c < num_continuity; c++) {
-        decimal_t scale_l = pow(duration_l, 1 - c);
-        decimal_t scale_r = pow(duration_r, 1 - c);
+        decimal_t scale_l = pow(duration_l, 1 - c); //
+        decimal_t scale_r = pow(duration_r, 1 - c); // 
         for (int d = 0; d < N_DIM; d++) {
           idx = d * num_connections * num_continuity + n * num_continuity + c;
           if (c == 0) {
             // ~ position end
-            idy = d * num_segments * num_order + n * num_order + N_DEG;
+            idy = d * num_segments * num_order + n * num_order + N_DEG; //p^l_5
             val = 1.0 * scale_l;
             A.insert(idx, idy) = val;
             // ~ position begin
-            idy = d * num_segments * num_order + (n + 1) * num_order + 0;
+            idy = d * num_segments * num_order + (n + 1) * num_order + 0; //p^r_0
             val = 1.0 * scale_r;
             A.insert(idx, idy) = -val;
           } else if (c == 1) {
             // ~ velocity end
-            idy = d * num_segments * num_order + n * num_order + N_DEG - 1;
+            idy = d * num_segments * num_order + n * num_order + N_DEG - 1; //p^l_4
             val = -1.0 * scale_l;
             A.insert(idx, idy) = val;
-            idy = d * num_segments * num_order + n * num_order + N_DEG;
+            idy = d * num_segments * num_order + n * num_order + N_DEG; //p^l_5
             val = 1.0 * scale_l;
             A.insert(idx, idy) = val;
             // ~ velocity begin
-            idy = d * num_segments * num_order + (n + 1) * num_order;
+            idy = d * num_segments * num_order + (n + 1) * num_order; //p^r_0
             val = -1.0 * scale_r;
             A.insert(idx, idy) = -val;
-            idy = d * num_segments * num_order + (n + 1) * num_order + 1;
+            idy = d * num_segments * num_order + (n + 1) * num_order + 1; //p^r_1
             val = 1.0 * scale_r;
-            A.insert(idx, idy) = -val;
+            A.insert(idx, idy) = -val;  
           } else if (c == 2) {
             // ~ acceleration end
             idy = d * num_segments * num_order + n * num_order + N_DEG - 2;
@@ -647,7 +667,7 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
   // ~ Stage III: stack inequality constraints
   int total_num_ineq = 0;
   for (int i = 0; i < num_segments; i++) {
-    total_num_ineq += (static_cast<int>(cubes[i].p_ub.size())) * num_order;
+    total_num_ineq += (static_cast<int>(cubes[i].p_ub.size())) * num_order; // 2 * 6
     total_num_ineq +=
         (static_cast<int>(cubes[i].v_ub.size())) * (num_order - 1);
     total_num_ineq +=
@@ -719,7 +739,7 @@ ErrorType SplineGenerator<N_DEG, N_DIM>::GetBezierSplineUsingCorridor(
   Eigen::VectorXd l = (-u.array()).matrix();
 
   // ~ Stage IV: solve
-  Eigen::VectorXd x;
+  Eigen::VectorXd x; // 待优化变量
   x.setZero(total_num_vals);
   if (!OoQpItf::solve(Q, c, A, b, C, lbd, ubd, l, u, x, true, false)) {
     printf("[GetBezierSplineUsingCorridor]Solver error.\n");

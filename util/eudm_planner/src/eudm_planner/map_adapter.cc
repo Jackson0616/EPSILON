@@ -153,7 +153,7 @@ bool EudmPlannerMapAdapter::IsLaneConsistent(const int lane_id_old,
   std::list<int> queue;
   visited_set.insert(lane_id_old);
   queue.push_back(lane_id_old);
-  //* BFS
+  //* BFS 广度优先搜索，将 lane_id_old 车道的后续车道 id 都放入 visited_set 中
   int cur_id;
   while (!queue.empty() && expanded_nodes < max_nodes_expanded) {
     cur_id = queue.front();
@@ -175,7 +175,7 @@ bool EudmPlannerMapAdapter::IsLaneConsistent(const int lane_id_old,
       }
     }
   }
-
+  // 判断 lane_id_new 是不是 lane_id_old 的后续车道
   if (visited_set.find(lane_id_new) != visited_set.end()) return true;
   return false;
 }

@@ -188,7 +188,7 @@ class SscMap {
 
   bool map_valid_ = false;
 
-  vec_E<common::DrivingCorridor> driving_corridor_vec_;
+  vec_E<common::DrivingCorridor> driving_corridor_vec_; // 对应有几条前向仿真轨迹
 
   std::vector<int> if_corridor_valid_;
   vec_E<vec_E<common::SpatioTemporalSemanticCubeNd<2>>> final_corridor_vec_;

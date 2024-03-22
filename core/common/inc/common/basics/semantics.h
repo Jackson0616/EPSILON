@@ -760,9 +760,9 @@ struct PointVecForKdTree {
 template <int N_DIM>
 struct SpatioTemporalSemanticCubeNd {
   decimal_t t_lb, t_ub;
-  std::array<decimal_t, N_DIM> p_lb, p_ub;
-  std::array<decimal_t, N_DIM> v_lb, v_ub;
-  std::array<decimal_t, N_DIM> a_lb, a_ub;
+  std::array<decimal_t, N_DIM> p_lb, p_ub; //p_lb[s下界，l下界] 
+  std::array<decimal_t, N_DIM> v_lb, v_ub; // 
+  std::array<decimal_t, N_DIM> a_lb, a_ub; //
 
   SpatioTemporalSemanticCubeNd() { FillDefaultBounds(); }
 

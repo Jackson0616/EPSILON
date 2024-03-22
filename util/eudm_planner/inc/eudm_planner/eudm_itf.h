@@ -22,7 +22,7 @@ struct LaneChangeInfo {
 struct Task {
   bool is_under_ctrl = false;
   double user_desired_vel;
-  int user_perferred_behavior = 0;
+  int user_perferred_behavior = 0; 
   LaneChangeInfo lc_info;
 };
 
