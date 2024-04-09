@@ -15,6 +15,7 @@ ErrorType RssChecker::CalculateSafeLongitudinalDistance(
       other_vel_abs + config.longitudinal_acc_max * config.response_time;
 
   decimal_t ego_distance_driven, other_distance_driven;
+  // // 他车在自车前方
   if (direction == Front) {
     ego_distance_driven =
         (ego_vel_abs + ego_vel_at_response_time) / 2.0 * config.response_time +
@@ -39,6 +40,7 @@ ErrorType RssChecker::CalculateSafeLongitudinalDistance(
       ret = 0.0;
     }
   } else if (direction == Rear) {
+    // 他车在自车后方
     ego_distance_driven =
         ego_vel_abs * ego_vel_abs / (2 * config.longitudinal_brake_max);
     if (ego_vel >= 0.0 && other_vel >= 0.0) {
@@ -165,6 +167,7 @@ ErrorType RssChecker::CalculateSafeLateralDistance(
       other_lat_vel_at_response_time * other_lat_vel_at_response_time /
           (2 * config.lateral_brake_min);
   if (direction == Right) {
+    // 他车在自车右侧
     if (ego_vel >= 0.0 && other_vel >= 0.0) {
       // -------------------------------
       // ego    ^^^^^^^^

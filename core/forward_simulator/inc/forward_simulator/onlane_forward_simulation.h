@@ -38,7 +38,7 @@ class OnLaneForwardSimulation {
     decimal_t max_steer_rate = 0.39;
     bool auto_decelerate_if_lat_failed = true;
   };
-
+  // 基于参考线，根据前车及后车信息获取自车目标状态()
   static ErrorType GetTargetStateOnTargetLane(
       const common::StateTransformer& stf_target,
       const common::Vehicle& ego_vehicle,
@@ -46,6 +46,7 @@ class OnLaneForwardSimulation {
       const common::Vehicle& gap_rear_vehicle, const Param& param,
       common::State* target_state) {
     common::FrenetState ego_fs;
+    // 获取frenet 系坐标 sl
     if (kSuccess !=
         stf_target.GetFrenetStateFromState(ego_vehicle.state(), &ego_fs)) {
       return kWrongStatus;
@@ -55,30 +56,38 @@ class OnLaneForwardSimulation {
     decimal_t min_spacing = param.idm_param.kMinimumSpacing;
 
     bool has_front = false;
+    // 
     common::FrenetState front_fs;
     decimal_t s_ref_front = -1;  // tail of front vehicle
     decimal_t s_thres_front = -1;
+    // 获取前车frenet 坐标
     if (gap_front_vehicle.id() != -1 &&
         kSuccess == stf_target.GetFrenetStateFromState(
                         gap_front_vehicle.state(), &front_fs)) {
+      // 
       has_front = true;
+      // 获取自车距离前车尾部的距离
       s_ref_front =
           front_fs.vec_s[0] - (gap_front_vehicle.param().length() / 2.0 -
                                gap_front_vehicle.param().d_cr());
+      // 实际距离同期望距离的差值？
       s_thres_front = s_ref_front - min_spacing -
                       time_headaway * ego_vehicle.state().velocity;
     }
-
+    
     bool has_rear = false;
     common::FrenetState rear_fs;
     decimal_t s_ref_rear = -1;  // head of rear vehicle
     decimal_t s_thres_rear = -1;
+    // 后车frenet 坐标
     if (gap_rear_vehicle.id() != -1 &&
         kSuccess == stf_target.GetFrenetStateFromState(gap_rear_vehicle.state(),
                                                        &rear_fs)) {
       has_rear = true;
+      // 后车车头 s 
       s_ref_rear = rear_fs.vec_s[0] + gap_rear_vehicle.param().length() / 2.0 +
                    gap_rear_vehicle.param().d_cr();
+      // 
       s_thres_rear = s_ref_rear + min_spacing +
                      time_headaway * gap_rear_vehicle.state().velocity;
     }
@@ -101,26 +110,27 @@ class OnLaneForwardSimulation {
       if (s_ref_front < s_ref_rear) {
         return kWrongStatus;
       }
-
+      // 
       decimal_t ds = fabs(s_ref_front - s_ref_rear);
       decimal_t s_star = s_ref_rear + ds / 2.0 - ego_vehicle.param().d_cr();
-
+      // 
       s_thres_front = std::max(s_star, s_thres_front);
+      // 
       s_thres_rear = std::min(s_star, s_thres_rear);
-
+      // 期望的移动的距离s
       desired_s =
           std::min(std::max(s_thres_rear, ego_fs.vec_s[0]), s_thres_front);
-
+      // 基于前车： 期望自车位置与实际自车位置的距离误差
       decimal_t s_err_front = s_thres_front - ego_fs.vec_s[0];
       decimal_t v_ref_front =
           std::max(0.0, gap_front_vehicle.state().velocity +
-                            truncate(s_err_front * k_v, dv_lb, dv_ub));
-
+                            truncate(s_err_front * k_v, dv_lb, dv_ub)); // 限幅
+      // 基于后车： 
       decimal_t s_err_rear = s_thres_rear - ego_fs.vec_s[0];
       decimal_t v_ref_rear =
           std::max(0.0, gap_rear_vehicle.state().velocity +
                             truncate(s_err_rear * k_v, dv_lb, dv_ub));
-
+      // 期望速度
       desired_v = std::min(std::max(v_ref_rear, ego_desired_vel), v_ref_front);
 
     } else if (has_front) {
@@ -155,11 +165,13 @@ class OnLaneForwardSimulation {
 
     return kSuccess;
   }
-
+  
+  // lane keeping 工况下进行下一时刻（一次迭代）的目标状态（位置速度等）
   static ErrorType PropagateOnceAdvancedLK(
       const common::StateTransformer& stf, const common::Vehicle& ego_vehicle,
       const Vehicle& leading_vehicle, const decimal_t& lat_track_offset,
       const decimal_t& dt, const Param& param, State* desired_state) {
+
     common::State current_state = ego_vehicle.state();
     decimal_t wheelbase_len = ego_vehicle.param().wheel_base();
     auto sim_param = param;
@@ -167,6 +179,7 @@ class OnLaneForwardSimulation {
     // * Step I: Calculate steering
     bool steer_calculation_failed = false;
     common::FrenetState current_fs;
+    // frenet 坐标
     if (stf.GetFrenetStateFromState(current_state, &current_fs) != kSuccess ||
         current_fs.vec_s[1] < -kEPS) {
       // * ego Frenet state invalid or ego vehicle reverse gear
@@ -175,17 +188,19 @@ class OnLaneForwardSimulation {
 
     decimal_t steer, velocity;
     if (!steer_calculation_failed) {
+      // 纯跟踪计算目标转角
       decimal_t approx_lookahead_dist =
           std::min(std::max(param.steer_control_min_lookahead_dist,
                             current_state.velocity * param.steer_control_gain),
                    param.steer_control_max_lookahead_dist);
+      
       if (CalcualateSteer(stf, current_state, current_fs, wheelbase_len,
                           Vec2f(approx_lookahead_dist, lat_track_offset),
                           &steer) != kSuccess) {
         steer_calculation_failed = true;
       }
     }
-
+    
     steer = steer_calculation_failed ? current_state.steer : steer;
     decimal_t sim_vel = param.idm_param.kDesiredVelocity;
     if (param.auto_decelerate_if_lat_failed && steer_calculation_failed) {
@@ -194,6 +209,7 @@ class OnLaneForwardSimulation {
     sim_param.idm_param.kDesiredVelocity = std::max(0.0, sim_vel);
 
     // * Step II: Calculate velocity
+    // 根据IDM 模型计算期望加速度，并进一步计算期望速度
     common::FrenetState leading_fs;
     if (leading_vehicle.id() == kInvalidAgentId ||
         stf.GetFrenetStateFromState(leading_vehicle.state(), &leading_fs) !=
@@ -220,7 +236,7 @@ class OnLaneForwardSimulation {
                           sim_param, desired_state);
     return kSuccess;
   }
-
+  // 变道工况下一次前向仿真
   static ErrorType PropagateOnceAdvancedLC(
       const common::StateTransformer& stf_current,
       const common::StateTransformer& stf_target,
@@ -265,6 +281,7 @@ class OnLaneForwardSimulation {
 
     // * Step II: Calculate velocity
     // target longitudinal state on target lane
+    // 基于目标车道前后车，计算自车的期望状态
     common::State target_state;
     if (kSuccess != GetTargetStateOnTargetLane(
                         stf_target, ego_vehicle, gap_front_vehicle,
@@ -335,6 +352,7 @@ class OnLaneForwardSimulation {
 
     decimal_t steer, velocity;
     if (!steer_calculation_failed) {
+      // 纯跟踪计算方向盘转角
       decimal_t approx_lookahead_dist =
           std::min(std::max(param.steer_control_min_lookahead_dist,
                             current_state.velocity * param.steer_control_gain),
@@ -354,6 +372,7 @@ class OnLaneForwardSimulation {
     sim_param.idm_param.kDesiredVelocity = std::max(0.0, sim_vel);
 
     // * Step II: Calculate velocity
+    
     common::FrenetState leading_fs;
     if (leading_vehicle.id() == kInvalidAgentId ||
         stf.GetFrenetStateFromState(leading_vehicle.state(), &leading_fs) !=
@@ -376,6 +395,7 @@ class OnLaneForwardSimulation {
     }
 
     // * Step III: Get desired state using vehicle kinematic model
+    // 根据目标转角及速度更新下一时刻自车状态
     CalculateDesiredState(current_state, steer, velocity, wheelbase_len, dt,
                           sim_param, desired_state);
     return kSuccess;

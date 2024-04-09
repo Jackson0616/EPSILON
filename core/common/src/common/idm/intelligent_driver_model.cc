@@ -5,6 +5,8 @@ namespace common {
 ErrorType IntelligentDriverModel::GetIdmDesiredAcceleration(
     const IntelligentDriverModel::Param &param,
     const IntelligentDriverModel::State &cur_state, decimal_t *acc) {
+  // 根据 IDM 模型计算加速度
+  // 计算 期望跟车距离
   decimal_t s_star =
       param.kMinimumSpacing +
       std::max(0.0,
@@ -12,8 +14,10 @@ ErrorType IntelligentDriverModel::GetIdmDesiredAcceleration(
                    cur_state.v * (cur_state.v - cur_state.v_front) /
                        (2.0 * sqrt(param.kAcceleration *
                                    param.kComfortableBrakingDeceleration)));
+  // 计算实际跟车距离
   decimal_t s_alpha =
       std::max(0.0, cur_state.s_front - cur_state.s - param.kVehicleLength);
+  // 计算期望加速度
   *acc = param.kAcceleration *
          (1.0 - pow(cur_state.v / param.kDesiredVelocity, param.kExponent) -
           pow(s_star / s_alpha, 2));
@@ -33,6 +37,8 @@ ErrorType IntelligentDriverModel::GetIIdmDesiredAcceleration(
   // meaning as the desired time gap. This means that a platoon of identical
   // drivers and vehicles disperses much more than observed. Moreover, not all
   // cars will reach the desired speed
+  
+  // 计算 
   decimal_t a_free =
       cur_state.v <= param.kDesiredVelocity
           ? param.kAcceleration *
@@ -41,8 +47,10 @@ ErrorType IntelligentDriverModel::GetIIdmDesiredAcceleration(
                 (1 - pow(param.kDesiredVelocity / cur_state.v,
                          param.kAcceleration * param.kExponent /
                              param.kComfortableBrakingDeceleration));
+  // 计算实际距离
   decimal_t s_alpha =
       std::max(0.0, cur_state.s_front - cur_state.s - param.kVehicleLength);
+  // 计算期望跟车距离同实际跟车距离的比值
   decimal_t z =
       (param.kMinimumSpacing +
        std::max(0.0,

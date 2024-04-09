@@ -172,15 +172,16 @@ struct EnumClassHash {
 
 struct ProbDistOfLatBehaviors {
   bool is_valid = false;
+  //一个无序映射，将横向行为（枚举类型 LateralBehavior）映射到相应的概率值（decimal_t 类型）。使用 EnumClassHash 结构体作为哈希函数。
   std::unordered_map<LateralBehavior, decimal_t, EnumClassHash> probs{
       {common::LateralBehavior::kLaneChangeLeft, 0.0},
       {common::LateralBehavior::kLaneChangeRight, 0.0},
       {common::LateralBehavior::kLaneKeeping, 0.0}};
-
+  // 函数：用于设置指定横向行为的概率值。
   void SetEntry(const LateralBehavior &beh, const decimal_t &val) {
     probs[beh] = val;
   }
-
+  //检查概率分布是否已经归一化，即所有概率值之和是否接近于 1。如果接近于 1，则返回 true，否则返回 false。
   bool CheckIfNormalized() const {
     decimal_t sum = 0.0;
     for (const auto &entry : probs) {
@@ -192,7 +193,7 @@ struct ProbDistOfLatBehaviors {
       return false;
     }
   }
-
+  // 获取具有最大概率值的横向行为，并将其存储在传入的指针参数 beh 中。如果概率分布无效，则返回 false。
   bool GetMaxProbBehavior(LateralBehavior *beh) const {
     if (!is_valid) return false;
 

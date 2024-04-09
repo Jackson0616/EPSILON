@@ -84,8 +84,9 @@ class EudmPlanner : public Planner {
     // 车辆横纵向控制的参数
     OnLaneForwardSimulation::Param sim_param;
 
-    // * lat
+    // * lat 车辆横向行为的概率分布
     common::ProbDistOfLatBehaviors lat_probs;
+    //车辆的横向行为
     common::LateralBehavior lat_behavior{LateralBehavior::kUndefined};
 
     common::Lane lane;

@@ -15,7 +15,7 @@ class MultiModalForward {
   using VehicleSet = common::VehicleSet;
   using GridMap = common::GridMapND<uint8_t, 2>;
   using State = common::State;
-  typedef int AggressivenessLevel;
+  typedef int AggressivenessLevel; // 激进程度
 
   static ErrorType ParamLookUp(const AggressivenessLevel& agg_level,
                                OnLaneForwardSimulation::Param* param) {
