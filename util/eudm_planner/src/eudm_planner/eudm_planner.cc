@@ -242,7 +242,7 @@ ErrorType EudmPlanner::GetSurroundingForwardSimAgents(
     fsagent.lat_behavior = psv.second.lat_behavior;
 
     fsagent.lane = psv.second.lane;
-    fsagent.stf = common::StateTransformer(fsagent.lane);
+    fsagent.stf = common::StateTransformer(fsagent.lane); // 这个lane 是target lane ?
 
     // * other
     fsagent.lat_range = cfg_.sim().agent().cooperative_lat_range();

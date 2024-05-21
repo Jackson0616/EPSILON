@@ -4,8 +4,8 @@
 
   <arg name="ctrl_topic" value="/ctrl/agent_0" />
 
-  <arg name="playground" value = "highway_v1.0" />
-  <!-- <arg name="playground" value = "ring_tiny_v1.0" /> -->
+  <!-- <arg name="playground" value = "highway_v1.0" /> -->
+  <arg name="playground" value = "ring_tiny_v1.0" />
   <!-- <arg name="playground" value = "ring_small_v1.0" /> -->
 
   <node pkg="planning_integrated"
